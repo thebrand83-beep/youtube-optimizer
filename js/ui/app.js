@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config.js';
-import { generate } from '../core/gemini.js';
+import { generate, sleep } from '../core/gemini.js';
 import { analyzeVideo, buildSeo, designThumbnails, generateThumbImage } from '../core/pipeline.js';
 import { parseVideoId, watchUrl, fetchOEmbed, frameUrls } from '../core/youtube.js';
 import { tagsLength, fitTags, normHashtag } from '../core/seo.js';
@@ -90,7 +90,7 @@ async function run() {
     language: segVal('language'), detail: segVal('detail'), description: $('#desc').value.trim(), audience: $('#audience').value.trim(), timezone: $('#tz').value.trim(),
     links: settings.links ? settings.links.split('\n').map(s => s.trim()).filter(Boolean) : null,
   };
-  S.quality = settings.quality; S.thumbs = []; S.selectedTitle = 0;
+  S.quality = settings.quality; S.thumbs = []; S.concepts = []; S.thumbsPending = false; S.thumbErr = null; S.selectedTitle = 0;
   $('#go').disabled = true; showOnly('#progressSec');
   $('#progressSec').scrollIntoView({ behavior: 'smooth', block: 'center' });
   let ti = 0; $('#tip').textContent = TIPS[0]; clearInterval(tipTimer); tipTimer = setInterval(() => { $('#tip').textContent = TIPS[++ti % TIPS.length]; }, 6000);
@@ -123,18 +123,20 @@ async function run() {
       onText: t => { seoChars = t.length; P.chars(seoChars + thChars); const m = /"title"\s*:\s*"([^"]{8,})"/.exec(t); if (m) P.live(`כותרת ראשונה: "${m[1]}"`); } });
     const thP = designThumbnails({ apiKey, analysis: S.analysis, brief: S.brief, hasFace: !!S.face, quality: S.quality, onStatus,
       onText: t => { thChars = t.length; P.chars(seoChars + thChars); } });
-    const [B, C] = await Promise.allSettled([seoP, thP]);
-    if (B.status === 'rejected') throw B.reason;
-    S.seo = B.value.seo; S.models.seo = B.value.model;
-    S.concepts = C.status === 'fulfilled' ? C.value.concepts : [];
-    S.thumbErr = C.status === 'rejected' ? (C.reason?.he || C.reason?.message) : null;
-    progress(4, 'מעצב תמונות ממוזערות…', 'עיצוב התמונות');
-    P.stage('עיצוב התמונות הממוזערות', 93, 100, { tau: 3 });
-    await buildThumbs({ apiKey, onStatus });
-    P.done();
-    progress(5);
+    // Show results as soon as the SEO package is ready; thumbnails fill in when their concepts arrive.
+    const thDone = thP.then(async C => {
+      S.concepts = C.concepts; S.thumbErr = null; S.thumbsPending = true;
+      await buildThumbs({ apiKey, onStatus });
+      S.thumbsPending = false;
+    }, e => { S.concepts = []; S.thumbs = []; S.thumbsPending = false; S.thumbErr = e.he || e.message; });
+    const B = await seoP;
+    S.seo = B.seo; S.models.seo = B.model;
+    const thReady = await Promise.race([thDone.then(() => true), sleep(400).then(() => false)]);
+    if (!thReady) { S.thumbsPending = true; S.concepts = S.concepts || []; S.thumbs = []; }
+    P.done(); progress(5);
     saveHistory();
     renderResults();
+    if (!thReady) { await thDone; saveHistory(); updateThumbsPanel(); if ($('.tab.on')?.dataset.t !== 'th') toast('התמונות הממוזערות מוכנות ✓'); }
   } catch (e) {
     console.error(e);
     P.stop();
@@ -179,7 +181,7 @@ function saveHistory() {
   store.addHistory({ id: S.vid || S.meta?.title, vid: S.vid, ts: Date.now(), meta: S.meta, brief: S.brief, analysis: S.analysis, seo: S.seo, concepts: S.concepts, models: S.models });
 }
 async function restore(x) {
-  Object.assign(S, { vid: x.vid, meta: x.meta, brief: x.brief, analysis: x.analysis, seo: x.seo, concepts: x.concepts, models: x.models, thumbs: [], selectedTitle: 0 });
+  Object.assign(S, { vid: x.vid, meta: x.meta, brief: x.brief, analysis: x.analysis, seo: x.seo, concepts: x.concepts || [], models: x.models, thumbs: [], selectedTitle: 0, thumbsPending: false, thumbErr: null });
   if (S.vid) preloadFrames(S.vid);
   await buildThumbs({ apiKey: store.getKey(), skipAI: true });
   renderResults();
@@ -248,6 +250,39 @@ const bar = (label, v) => `<div class="bar-row"><span>${esc(label)}</span><div c
 const list = (arr, cls = '') => `<ul class="list ${cls}">${(arr || []).map(x => `<li><span>${esc(x)}</span></li>`).join('')}</ul>`;
 const secH = (icon, title, right = '') => `<div class="sec-h"><h3><span class="ic">${ic(icon)}</span>${title}</h3>${right}</div>`;
 
+function thumbsPanel() {
+  const s = S.seo, m = S.meta || {};
+  if (S.thumbsPending) return `<div class="card lux sec pending-thumbs"><div class="prog-head"><div class="orb"><i></i></div><div><h3>מתכנן 3 קונספטים לתמונות ממוזערות…</h3><p class="muted">שאר התוצאות כבר מוכנות — התמונות יופיעו כאן אוטומטית תוך רגע.</p></div></div><div class="grid3" style="margin-top:20px">${[0, 1, 2].map(() => '<div class="skel" style="height:auto;aspect-ratio:16/9;border-radius:12px"></div>').join('')}</div></div>`;
+  return `    <div class="card lux sec grok-steps">
+      ${secH('spark', 'רקע מקצועי עם Grok', '<span class="small muted">בחינם במסגרת המנוי שלך</span>')}
+      <ol class="steps3">
+        <li><b>1</b><div><strong>העתק</strong><span>לחץ "העתק פרומפט ופתח ב-Grok" בקונספט שאהבת${S.face || S.custom ? ' וצרף ב-Grok את התמונה שהעלית' : ''}</span></div></li>
+        <li><b>2</b><div><strong>צור והורד</strong><span>הדבק ב-Grok Imagine, בחר את התמונה הכי טובה ושמור אותה למכשיר</span></div></li>
+        <li><b>3</b><div><strong>העלה לכאן</strong><span>לחץ על "העלה תמונה מ-Grok" בקונספט (או גרור אותה במחשב) — הכותרת בעברית תתווסף אוטומטית</span></div></li>
+      </ol>
+      ${S.aiError && store.getSettings().aiImages !== 'off' ? `<p class="small muted" style="margin-top:10px">יצירה אוטומטית ב-Gemini לא זמינה כרגע בחשבון — לכן משתמשים ב-Grok.</p>` : S.models?.image ? `<p class="small muted" style="margin-top:10px">חלק מהרקעים נוצרו אוטומטית ב-${esc(S.models.image)}.</p>` : ''}
+    </div>
+    <div class="card sec" style="margin-bottom:18px">${secH('refresh', 'שיפור ויצירה מחדש')}
+      <div class="refs">
+        <label class="ref-slot" id="faceSlot">${S.face ? `<img src="${S.face.url}">` : ic('user')}<span><b>התמונה שלך</b><br>${S.face ? 'לחץ להחלפה' : 'העלה תמונת פנים להבעה חזקה'}</span><input type="file" accept="image/*" hidden id="faceIn"></label>
+        <label class="ref-slot" id="frameSlot">${S.custom ? `<img src="${S.custom.url}">` : ic('img')}<span><b>פריים מהסרטון</b><br>${S.custom ? 'לחץ להחלפה' : 'העלה צילום מסך מהסרטון'}</span><input type="file" accept="image/*" hidden id="frameIn"></label>
+        <div class="fb"><textarea class="textarea" id="fb" rows="2" placeholder="מה לשנות? לדוגמה: יותר דרמטי, טקסט קצר יותר, צבעים חמים, להדגיש את התוצאה"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-gold" id="regen">${ic('refresh')}צור קונספטים חדשים</button><span class="small muted" style="align-self:center">התמונות שתעלה נשארות בדפדפן בלבד.</span></div>
+    </div>
+    ${!S.thumbs.length ? `<div class="notice">${ic('warn')}<div><b>הקונספטים לתמונות לא נוצרו הפעם.</b><br><span class="muted">${esc(S.thumbErr || '')} לחץ "צור קונספטים חדשים" כדי לנסות שוב — שאר התוצאות מוכנות.</span></div></div>` : ''}
+    <div class="grid3" id="thumbGrid">${S.thumbs.map((t, i) => thumbCard(t, i)).join('')}</div>
+    <div class="card sec" style="margin-top:18px">${secH('img', 'כך זה ייראה בפיד של יוטיוב')}<div class="feed">${S.thumbs.map((t, i) => `<div class="feed-item"><div class="ph"><canvas data-thumb="${i}"></canvas></div><div class="fl"><div class="av"></div><div><div class="ft">${esc(s.titles?.[S.selectedTitle]?.title)}</div><div class="fc">${esc(m.author_name || 'הערוץ שלך')} · לפני שעה</div></div></div></div>`).join('')}</div></div>
+`;
+}
+
+function updateThumbsPanel() {
+  const panel = $('[data-p="th"]'); if (!panel) return;
+  panel.innerHTML = thumbsPanel();
+  const n = $('[data-t="th"] .n'); if (n) n.textContent = S.thumbsPending ? '…' : S.thumbs.length;
+  wireThumbs();
+}
+
 function renderResults() {
   const a = S.analysis, s = S.seo, m = S.meta || {};
   const sc = a.scores || {};
@@ -268,7 +303,7 @@ function renderResults() {
     <button class="tab" data-t="ti">כותרות <span class="n">${s.titles?.length || 0}</span></button>
     <button class="tab" data-t="de">תיאור</button>
     <button class="tab" data-t="tg">תגיות <span class="n">${s.tags.length}</span></button>
-    <button class="tab" data-t="th">תמונות ממוזערות <span class="n">${S.thumbs.length}</span></button>
+    <button class="tab" data-t="th">תמונות ממוזערות <span class="n">${S.thumbsPending ? '…' : S.thumbs.length}</span></button>
     <button class="tab" data-t="re">דוח אופטימיזציה</button>
   </nav>
 
@@ -314,26 +349,7 @@ function renderResults() {
   </section>
 
   <section class="panel" data-p="th">
-    <div class="card lux sec grok-steps">
-      ${secH('spark', 'רקע מקצועי עם Grok', '<span class="small muted">בחינם במסגרת המנוי שלך</span>')}
-      <ol class="steps3">
-        <li><b>1</b><div><strong>העתק</strong><span>לחץ "העתק פרומפט ופתח ב-Grok" בקונספט שאהבת${S.face || S.custom ? ' וצרף ב-Grok את התמונה שהעלית' : ''}</span></div></li>
-        <li><b>2</b><div><strong>צור והורד</strong><span>הדבק ב-Grok Imagine, בחר את התמונה הכי טובה ושמור אותה למכשיר</span></div></li>
-        <li><b>3</b><div><strong>העלה לכאן</strong><span>לחץ על "העלה תמונה מ-Grok" בקונספט (או גרור אותה במחשב) — הכותרת בעברית תתווסף אוטומטית</span></div></li>
-      </ol>
-      ${S.aiError && store.getSettings().aiImages !== 'off' ? `<p class="small muted" style="margin-top:10px">יצירה אוטומטית ב-Gemini לא זמינה כרגע בחשבון — לכן משתמשים ב-Grok.</p>` : S.models?.image ? `<p class="small muted" style="margin-top:10px">חלק מהרקעים נוצרו אוטומטית ב-${esc(S.models.image)}.</p>` : ''}
-    </div>
-    <div class="card sec" style="margin-bottom:18px">${secH('refresh', 'שיפור ויצירה מחדש')}
-      <div class="refs">
-        <label class="ref-slot" id="faceSlot">${S.face ? `<img src="${S.face.url}">` : ic('user')}<span><b>התמונה שלך</b><br>${S.face ? 'לחץ להחלפה' : 'העלה תמונת פנים להבעה חזקה'}</span><input type="file" accept="image/*" hidden id="faceIn"></label>
-        <label class="ref-slot" id="frameSlot">${S.custom ? `<img src="${S.custom.url}">` : ic('img')}<span><b>פריים מהסרטון</b><br>${S.custom ? 'לחץ להחלפה' : 'העלה צילום מסך מהסרטון'}</span><input type="file" accept="image/*" hidden id="frameIn"></label>
-        <div class="fb"><textarea class="textarea" id="fb" rows="2" placeholder="מה לשנות? לדוגמה: יותר דרמטי, טקסט קצר יותר, צבעים חמים, להדגיש את התוצאה"></textarea></div>
-      </div>
-      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-gold" id="regen">${ic('refresh')}צור קונספטים חדשים</button><span class="small muted" style="align-self:center">התמונות שתעלה נשארות בדפדפן בלבד.</span></div>
-    </div>
-    ${!S.thumbs.length ? `<div class="notice">${ic('warn')}<div><b>הקונספטים לתמונות לא נוצרו הפעם.</b><br><span class="muted">${esc(S.thumbErr || '')} לחץ "צור קונספטים חדשים" כדי לנסות שוב — שאר התוצאות מוכנות.</span></div></div>` : ''}
-    <div class="grid3" id="thumbGrid">${S.thumbs.map((t, i) => thumbCard(t, i)).join('')}</div>
-    <div class="card sec" style="margin-top:18px">${secH('img', 'כך זה ייראה בפיד של יוטיוב')}<div class="feed">${S.thumbs.map((t, i) => `<div class="feed-item"><div class="ph"><canvas data-thumb="${i}"></canvas></div><div class="fl"><div class="av"></div><div><div class="ft">${esc(s.titles?.[S.selectedTitle]?.title)}</div><div class="fc">${esc(m.author_name || 'הערוץ שלך')} · לפני שעה</div></div></div></div>`).join('')}</div></div>
+${thumbsPanel()}
   </section>
 
   <section class="panel" data-p="re">
@@ -432,6 +448,11 @@ function wireResults() {
     if (e.target.closest('#dlReport')) return downloadReport();
     if (e.target.closest('#regen')) return regenerate();
   };
+  wireThumbs();
+}
+
+function wireThumbs() {
+  if (!$('#thumbGrid')) return;
   $('#thumbGrid').oninput = $('#thumbGrid').onchange = e => {
     const card = e.target.closest('.thumb-card'), f = e.target.dataset.f ?? (e.target.dataset.grok != null ? 'grok' : null); if (!card || !f) return;
     const i = +card.dataset.i, t = S.thumbs[i];
