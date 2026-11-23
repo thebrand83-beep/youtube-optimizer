@@ -4,6 +4,7 @@ import { analyzeVideo, buildSeo, designThumbnails, generateThumbImage } from '..
 import { parseVideoId, watchUrl, fetchOEmbed, frameUrls } from '../core/youtube.js';
 import { tagsLength, fitTags, normHashtag } from '../core/seo.js';
 import * as store from './storage.js';
+import { grokPrompt } from '../core/prompts.js';
 import { render, toJpeg, loadImage, ensureFonts } from './composer.js';
 
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -147,7 +148,7 @@ function preloadFrames(vid) {
   });
   return framesPromise;
 }
-const SRC_LABEL = { ai: 'AI', cover: 'תמונה נוכחית', f1: 'פריים 1', f2: 'פריים 2', f3: 'פריים 3', custom: 'תמונה שהעלית', face: 'התמונה שלך', none: 'רקע גרפי' };
+const SRC_LABEL = { grok: 'תמונה מ-Grok', ai: 'AI', cover: 'תמונה נוכחית', f1: 'פריים 1', f2: 'פריים 2', f3: 'פריים 3', custom: 'תמונה שהעלית', face: 'התמונה שלך', none: 'רקע גרפי' };
 function defaultSource(i) {
   if (S.custom) return 'custom';
   const order = [['f2', 'f1', 'f3', 'cover'], ['f1', 'f3', 'f2', 'cover'], ['f3', 'f2', 'f1', 'cover']][i] || ['cover'];
@@ -183,10 +184,10 @@ async function buildThumbs({ apiKey, onStatus, skipAI, only } = {}) {
   }
   for (const i of S.concepts.map((_, i) => i)) if (!S.thumbs[i]) S.thumbs[i] = { concept: S.concepts[i], headline: S.concepts[i].headline, badge: S.concepts[i].badge || '', layout: S.concepts[i].layout, src: defaultSource(i), useFace: !!S.face };
 }
-function bgFor(t) { return t.src === 'ai' ? t.ai : t.src === 'custom' ? S.custom?.img : t.src === 'face' ? S.face?.img : S.frames[t.src] || null; }
+function bgFor(t) { return t.src === 'grok' ? t.grok : t.src === 'ai' ? t.ai : t.src === 'custom' ? S.custom?.img : t.src === 'face' ? S.face?.img : S.frames[t.src] || null; }
 function drawThumb(i, canvas) {
   const t = S.thumbs[i]; if (!t) return;
-  render(canvas, { bg: bgFor(t), face: t.useFace && t.src !== 'face' ? S.face?.img : null, concept: { ...t.concept, layout: t.layout }, headline: t.headline, badge: t.badge });
+  render(canvas, { bg: bgFor(t), face: t.useFace && t.src !== 'face' ? S.face?.img : null, concept: { ...t.concept, layout: t.layout }, headline: t.headline, badge: t.badge, bgFocus: t.src === 'grok' || t.src === 'ai' ? 0.5 : null });
 }
 function redraw(i) {
   $$(`canvas[data-thumb="${i}"]`).forEach(c => drawThumb(i, c));
@@ -267,7 +268,15 @@ function renderResults() {
   </section>
 
   <section class="panel" data-p="th">
-    ${S.aiBlocked || S.aiError ? `<div class="notice">${ic('warn')}<div><b>יצירת תמונות ב-AI לא זמינה בחשבון ה-Gemini שלך כרגע.</b><br><span class="muted">${esc(S.aiError || '')} התמונות עוצבו ב"מעצב החכם" מפריימים אמיתיים מהסרטון ומהקונספט שה-AI תכנן. להפעלת Nano Banana: הפעל חיוב ב-Google AI Studio ואז לחץ "צור מחדש".</span></div></div>` : S.models?.image ? `<div class="notice info">${ic('spark')}<div>הרקעים נוצרו ב-${esc(S.models.image)}, והטקסט עוצב בגופן מקצועי.</div></div>` : ''}
+    <div class="card lux sec grok-steps">
+      ${secH('spark', 'רקע מקצועי עם Grok', '<span class="small muted">בחינם במסגרת המנוי שלך</span>')}
+      <ol class="steps3">
+        <li><b>1</b><div><strong>העתק</strong><span>לחץ "העתק פרומפט ופתח ב-Grok" בקונספט שאהבת${S.face || S.custom ? ' וצרף ב-Grok את התמונה שהעלית' : ''}</span></div></li>
+        <li><b>2</b><div><strong>צור והורד</strong><span>הדבק ב-Grok Imagine, בחר את התמונה הכי טובה ושמור אותה למכשיר</span></div></li>
+        <li><b>3</b><div><strong>העלה לכאן</strong><span>לחץ על "העלה תמונה מ-Grok" בקונספט (או גרור אותה במחשב) — הכותרת בעברית תתווסף אוטומטית</span></div></li>
+      </ol>
+      ${S.aiError && store.getSettings().aiImages !== 'off' ? `<p class="small muted" style="margin-top:10px">יצירה אוטומטית ב-Gemini לא זמינה כרגע בחשבון — לכן משתמשים ב-Grok.</p>` : S.models?.image ? `<p class="small muted" style="margin-top:10px">חלק מהרקעים נוצרו אוטומטית ב-${esc(S.models.image)}.</p>` : ''}
+    </div>
     <div class="card sec" style="margin-bottom:18px">${secH('refresh', 'שיפור ויצירה מחדש')}
       <div class="refs">
         <label class="ref-slot" id="faceSlot">${S.face ? `<img src="${S.face.url}">` : ic('user')}<span><b>התמונה שלך</b><br>${S.face ? 'לחץ להחלפה' : 'העלה תמונת פנים להבעה חזקה'}</span><input type="file" accept="image/*" hidden id="faceIn"></label>
@@ -301,9 +310,26 @@ function renderResults() {
   $('#results').scrollIntoView({ behavior: 'smooth' });
 }
 
+function promptFor(i) { return grokPrompt(S.thumbs[i].concept, { hasFace: !!S.face, hasFrame: !!S.custom }); }
+function copySync(text) {
+  const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch { /* ignore */ } ta.remove();
+  navigator.clipboard?.writeText(text).catch(() => {});
+  return ok;
+}
+async function setGrok(i, file) {
+  if (!file || !file.type.startsWith('image/')) return toast('בחר קובץ תמונה (JPG/PNG/WebP)', true);
+  const t = S.thumbs[i], url = URL.createObjectURL(file);
+  try { t.grok = await loadImage(url); } catch { return toast('לא הצלחתי לקרוא את התמונה', true); }
+  t.grokUrl = url; t.src = 'grok'; t.useFace = false;
+  const card = document.querySelector(`.thumb-card[data-i="${i}"]`);
+  if (card) card.outerHTML = thumbCard(t, i);
+  redraw(i); toast('הרקע מ-Grok הוטמע — הכותרת נוספה אוטומטית ✓');
+}
+
 function thumbCard(t, i) {
   const c = t.concept;
-  const srcs = ['ai', 'cover', 'f1', 'f2', 'f3', 'custom', 'face', 'none'].filter(k => k === 'none' || (k === 'ai' ? t.ai : k === 'custom' ? S.custom : k === 'face' ? S.face : S.frames[k]));
+  const srcs = ['grok', 'ai', 'cover', 'f1', 'f2', 'f3', 'custom', 'face', 'none'].filter(k => k === 'none' || (k === 'grok' ? t.grok : k === 'ai' ? t.ai : k === 'custom' ? S.custom : k === 'face' ? S.face : S.frames[k]));
   const L = { 'text-right': 'טקסט מימין', 'text-left': 'טקסט משמאל', 'bottom-bar': 'טקסט למטה', 'center-punch': 'טקסט במרכז' };
   return `<div class="card thumb-card" data-i="${i}">
     <canvas class="thumb-canvas" data-thumb="${i}"></canvas>
@@ -315,6 +341,15 @@ function thumbCard(t, i) {
       <select class="select" data-f="src">${srcs.map(k => `<option value="${k}" ${k === t.src ? 'selected' : ''}>רקע: ${SRC_LABEL[k]}</option>`).join('')}</select>
       <select class="select" data-f="layout">${Object.entries(L).map(([k, v]) => `<option value="${k}" ${k === t.layout ? 'selected' : ''}>${v}</option>`).join('')}</select>
       ${S.face ? `<label class="small muted full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-f="useFace" ${t.useFace ? 'checked' : ''}> לשלב את התמונה שלך</label>` : ''}
+      <div class="grok full">
+        <label class="grok-drop ${t.grok ? 'has' : ''}" data-drop="${i}">
+          ${t.grok ? `<img src="${t.grokUrl}" alt="">` : ic('upload')}
+          <span><b>${t.grok ? 'הרקע מ-Grok הוטמע ✓' : 'העלה תמונה מ-Grok'}</b><br><small>${t.grok ? 'גרור או לחץ להחלפה' : 'גרור לכאן או לחץ לבחירה'}</small></span>
+          <input type="file" accept="image/*" hidden data-grok="${i}">
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm grok-open" data-grokopen="${i}">${ic('spark')}העתק פרומפט ופתח ב-Grok</button>
+        <details class="prompt-box"><summary>הצג את הפרומפט (באנגלית)</summary><pre dir="ltr">${esc(promptFor(i))}</pre>${copyBtn('prompt:' + i, 'העתק פרומפט')}</details>
+      </div>
       <button class="btn btn-gold btn-sm full" data-dl="${i}">${ic('dl')}הורד JPG (1280×720)</button>
     </div>
   </div>`;
@@ -344,19 +379,26 @@ function wireResults() {
   $$('.title-card').forEach(c => c.onclick = e => { if (e.target.closest('.copy')) return; S.selectedTitle = +c.dataset.ti; $$('.title-card').forEach(x => x.classList.toggle('sel', x === c)); $$('.feed-item .ft').forEach(f => f.textContent = S.seo.titles[S.selectedTitle].title); updateDesc(); });
   $('#results').onclick = e => {
     const cb = e.target.closest('[data-copy]'); if (cb) { e.stopPropagation(); return copyText(copyPayload(cb.dataset.copy), cb); }
+    const go = e.target.closest('[data-grokopen]');
+    if (go) { copySync(promptFor(+go.dataset.grokopen)); window.open('https://grok.com/imagine', '_blank', 'noopener'); toast('הפרומפט הועתק — הדבק אותו ב-Grok'); return; }
     const dl = e.target.closest('[data-dl]'); if (dl) return downloadThumb(+dl.dataset.dl);
     if (e.target.closest('#dlReport')) return downloadReport();
     if (e.target.closest('#regen')) return regenerate();
   };
   $('#thumbGrid').oninput = $('#thumbGrid').onchange = e => {
-    const card = e.target.closest('.thumb-card'), f = e.target.dataset.f; if (!card || !f) return;
+    const card = e.target.closest('.thumb-card'), f = e.target.dataset.f ?? (e.target.dataset.grok != null ? 'grok' : null); if (!card || !f) return;
     const i = +card.dataset.i, t = S.thumbs[i];
+    if (e.target.dataset.grok != null) { if (e.type === 'change') setGrok(i, e.target.files[0]); return; }
     t[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     if (f === 'src') card.querySelector('.src-tag').textContent = SRC_LABEL[t.src];
     redraw(i);
   };
-  $('#faceIn').onchange = async e => { const f = e.target.files[0]; if (!f) return; const url = URL.createObjectURL(f); const img = await loadImage(url); S.face = { url, img, ref: imgToB64(img) }; S.thumbs.forEach(t => t.useFace = true); rerenderThumbTab(); toast('התמונה שלך שולבה בתמונות הממוזערות'); };
-  $('#frameIn').onchange = async e => { const f = e.target.files[0]; if (!f) return; const url = URL.createObjectURL(f); S.custom = { url, img: await loadImage(url) }; S.thumbs.forEach(t => { if (t.src !== 'ai') t.src = 'custom'; }); rerenderThumbTab(); };
+  const grid = $('#thumbGrid');
+  grid.addEventListener('dragover', e => { const d = e.target.closest('.grok-drop'); if (d) { e.preventDefault(); d.classList.add('drag'); } });
+  grid.addEventListener('dragleave', e => { const d = e.target.closest('.grok-drop'); if (d && !d.contains(e.relatedTarget)) d.classList.remove('drag'); });
+  grid.addEventListener('drop', e => { const d = e.target.closest('.grok-drop'); if (!d) return; e.preventDefault(); d.classList.remove('drag'); setGrok(+d.dataset.drop, e.dataTransfer.files[0]); });
+  $('#faceIn').onchange = async e => { const f = e.target.files[0]; if (!f) return; const url = URL.createObjectURL(f); const img = await loadImage(url); S.face = { url, img, ref: imgToB64(img) }; S.thumbs.forEach(t => t.useFace = t.src !== 'grok'); rerenderThumbTab(); toast('התמונה שלך שולבה בתמונות הממוזערות'); };
+  $('#frameIn').onchange = async e => { const f = e.target.files[0]; if (!f) return; const url = URL.createObjectURL(f); S.custom = { url, img: await loadImage(url) }; S.thumbs.forEach(t => { if (t.src !== 'ai' && t.src !== 'grok') t.src = 'custom'; }); rerenderThumbTab(); };
   S.thumbs.forEach((_, i) => redraw(i));
 }
 function rerenderThumbTab() { const keep = S.selectedTitle; renderResults(); S.selectedTitle = keep; $$('.tab').forEach(x => x.classList.toggle('on', x.dataset.t === 'th')); $$('.panel').forEach(p => p.classList.toggle('on', p.dataset.p === 'th')); S.thumbs.forEach((_, i) => redraw(i)); }
@@ -383,6 +425,7 @@ async function downloadThumb(i) {
 function copyPayload(k) {
   const s = S.seo;
   if (k.startsWith('title:')) return s.titles[+k.split(':')[1]].title;
+  if (k.startsWith('prompt:')) return promptFor(+k.split(':')[1]);
   if (k === 'desc') return $('#descText').value;
   if (k === 'tags') return s.tags.join(', ');
   if (k === 'hashtags') return (s.hashtags || []).map(normHashtag).join(' ');

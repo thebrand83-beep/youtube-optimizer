@@ -2,7 +2,7 @@
 const K = { key: 'ytps.geminiKey', settings: 'ytps.settings', history: 'ytps.history' };
 export const getKey = () => localStorage.getItem(K.key) || '';
 export const setKey = v => v ? localStorage.setItem(K.key, v.trim()) : localStorage.removeItem(K.key);
-export const getSettings = () => ({ quality: 'balanced', aiImages: 'auto', links: '', ...JSON.parse(localStorage.getItem(K.settings) || '{}') });
+export const getSettings = () => ({ quality: 'balanced', aiImages: 'off', links: '', ...JSON.parse(localStorage.getItem(K.settings) || '{}') });
 export const setSettings = s => localStorage.setItem(K.settings, JSON.stringify(s));
 export const getHistory = () => JSON.parse(localStorage.getItem(K.history) || '[]');
 export function addHistory(item) {

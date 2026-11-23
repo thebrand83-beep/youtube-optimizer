@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { analyzeVideo, buildSeo, designThumbnails, generateThumbImage } from '../js/core/pipeline.js';
 import { parseVideoId, watchUrl, fetchOEmbed } from '../js/core/youtube.js';
 import { tagsLength } from '../js/core/seo.js';
+import { grokPrompt } from '../js/core/prompts.js';
 
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) { console.error('GEMINI_API_KEY missing'); process.exit(1); }
@@ -23,6 +24,8 @@ fs.writeFileSync(`${out}/description.txt`, B.seo.descriptionText);
 fs.writeFileSync(`${out}/tags.txt`, B.seo.tags.join(', ') + `\n\n(${tagsLength(B.seo.tags)}/500 chars)`);
 const C = await designThumbnails({ apiKey, analysis: A.analysis, seo: B.seo, brief, onStatus: log }); log(`concepts by ${C.model}`);
 fs.writeFileSync(`${out}/thumb-concepts.json`, JSON.stringify(C.concepts, null, 2));
+fs.writeFileSync(`${out}/grok-prompts.txt`, C.concepts.map((c, i) => `=== Concept ${i + 1}: ${c.name} — "${c.headline}" (${c.layout}) ===\n${grokPrompt(c, {})}`).join('\n\n'));
+if (process.env.SKIP_AI_IMAGE) { log('done (skipped AI image)'); process.exit(0); }
 try {
   const img = await generateThumbImage({ apiKey, concept: C.concepts[0], onStatus: log });
   fs.writeFileSync(`${out}/ai-thumb-1.${img.mime.split('/')[1]}`, Buffer.from(img.b64, 'base64')); log(`AI image by ${img.model}`);

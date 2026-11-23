@@ -140,13 +140,13 @@
       </div>
       <p class="small muted" style="margin-top:6px">"מקסימלי" משתמש ב-Gemini Pro — דורש חיוב פעיל; אם אין מכסה, המערכת עוברת אוטומטית למודל הבא.</p>
     </div>
-    <div class="row">
-      <span class="lbl">תמונות ממוזערות בעזרת AI (Nano Banana)</span>
-      <div class="seg" data-name="aiImages">
-        <button type="button" data-v="auto" class="on">אוטומטי</button><button type="button" data-v="off">רק מעצב חכם</button>
+    <details class="row adv">
+      <summary>מתקדם: יצירת תמונות אוטומטית ב-Gemini (Nano Banana)</summary>
+      <div class="seg" data-name="aiImages" style="margin-top:10px">
+        <button type="button" data-v="off" class="on">כבוי (ברירת מחדל)</button><button type="button" data-v="auto">פעיל</button>
       </div>
-      <p class="small muted" style="margin-top:6px">יצירת תמונות ב-AI דורשת חיוב ב-Google AI Studio (כ-0.04–0.13$ לתמונה). בלי חיוב, המעצב החכם בונה תמונות מקצועיות מפריימים של הסרטון ומהתמונות שלך.</p>
-    </div>
+      <p class="small muted" style="margin-top:6px">אופציונלי, ורק אם יש חיוב פעיל ב-Google AI Studio. בדרך כלל עדיף לייצר את הרקע ב-Grok ולהעלות אותו לכאן.</p>
+    </details>
     <div class="row">
       <label class="lbl" for="links">קישורים קבועים לתיאור (שורה לכל קישור)</label>
       <textarea class="textarea" id="links" rows="4" placeholder="🔗 קישורים:&#10;▸ אתר: https://...&#10;▸ אינסטגרם: https://..."></textarea>

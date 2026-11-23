@@ -44,7 +44,7 @@ function wrap(ctx, words, maxW, size, text) {
   return { lines, space, widest: Math.max(...lines.map(l => l.w)) };
 }
 
-export function render(canvas, { bg, face, concept, headline, badge }) {
+export function render(canvas, { bg, face, concept, headline, badge, bgFocus = null }) {
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
   const layout = concept.layout || 'text-right';
@@ -56,7 +56,7 @@ export function render(canvas, { bg, face, concept, headline, badge }) {
   ctx.fillStyle = '#0b0b0f'; ctx.fillRect(0, 0, W, H);
   if (bg) {
     ctx.save(); ctx.filter = 'contrast(1.12) saturate(1.28) brightness(1.04)';
-    const focus = face ? (layout === 'text-left' ? 0.35 : 0.65) : (layout === 'text-right' ? 0.25 : layout === 'text-left' ? 0.75 : 0.5);
+    const focus = bgFocus != null ? bgFocus : face ? (layout === 'text-left' ? 0.35 : 0.65) : (layout === 'text-right' ? 0.25 : layout === 'text-left' ? 0.75 : 0.5);
     drawCover(ctx, bg, 0, 0, W, H, focus); ctx.restore();
   } else {
     const g = ctx.createRadialGradient(W * 0.3, H * 0.4, 40, W * 0.5, H * 0.5, W * 0.8);

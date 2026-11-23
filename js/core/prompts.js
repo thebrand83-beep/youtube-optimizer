@@ -97,7 +97,7 @@ export const THUMB_SCHEMA = obj({
     layout: str('One of: "text-right", "text-left", "bottom-bar", "center-punch"'),
     accent_color: str('Hex color for highlight, high contrast vs the scene'),
     frame_time: str('Timestamp of the best real frame for this concept'),
-    image_prompt: str('Detailed ENGLISH prompt for an AI image model to create the 16:9 thumbnail background: subject, expression, composition with empty space on the text side, lighting, colors. NO text, letters or logos in the image.'),
+    image_prompt: str('Excellent, vivid ENGLISH scene description (60-110 words) for an image generator (Grok Imagine): main subject from the real video, exact pose and facial expression, wardrobe, setting, camera angle and lens feel, lighting direction and mood, color palette, and where the subject sits in the frame so the text side stays clean. Photoreal. Do not mention any text, words or logos.'),
     why: str('One sentence in the output language: why this will win the click'),
   }), 'Exactly 3 different concepts'),
 });
@@ -114,7 +114,25 @@ ${feedback ? `CREATOR FEEDBACK — follow it strictly: "${feedback}"` : ''}
 Rules:
 - Write name, headline, badge, emotion and why in ${langName(brief.language)} (only image_prompt in English). Thumbnail text must COMPLEMENT the title, not repeat it. Max 16 characters.
 - One clear focal point, big face/emotion or striking result, high contrast, readable at mobile size.
-- Each concept uses a different psychological angle and a different layout.`;
+- Each concept uses a different psychological angle and a different layout.
+- image_prompt must match the layout: "text-right" → subject on the LEFT, right side empty; "text-left" → subject on the RIGHT, left side empty; "bottom-bar" → subject in the upper part, bottom empty; "center-punch" → subject low/behind, center-top empty. Describe ONE coherent scene (no split-screens or collages).`;
+}
+
+const SIDE = { 'text-left': 'left third', 'text-right': 'right third', 'bottom-bar': 'bottom third', 'center-punch': 'upper-center area' };
+
+/** Prompt for a consumer image tool (Grok Imagine). Gemini writes the scene; the app adds the hard thumbnail constraints. */
+export function grokPrompt(concept, { hasFace, hasFrame } = {}) {
+  const side = SIDE[concept.layout] || 'right third';
+  const subj = concept.layout === 'text-left' ? 'on the right side' : concept.layout === 'text-right' ? 'on the left side' : concept.layout === 'bottom-bar' ? 'in the upper two thirds' : 'slightly below center';
+  return [
+    'Create a 16:9 landscape YouTube thumbnail background image (1280x720 composition).',
+    'Photorealistic, ultra-sharp, high contrast, dramatic cinematic lighting, rich saturated colors, strong subject separation from the background, shallow depth of field.',
+    concept.image_prompt.trim(),
+    `Composition: keep the main subject ${subj}; leave the ${side} of the frame clean and uncluttered (dark or softly blurred) as empty space for a large headline that will be added later.`,
+    hasFace ? 'A reference photo of me is attached: use my face as the main person, keep my identity and facial features accurate, with a strong, readable expression.' : '',
+    hasFrame ? 'A reference frame from my video is attached: match its setting, people, wardrobe and color style.' : '',
+    'IMPORTANT: absolutely NO text, letters, words, numbers, captions, watermarks, logos or UI elements anywhere in the image.',
+  ].filter(Boolean).join('\n\n');
 }
 
 export function imagePrompt(concept, { hasFace, hasFrame }) {

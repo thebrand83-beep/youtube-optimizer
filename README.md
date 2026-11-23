@@ -10,6 +10,7 @@ A Hebrew (RTL) web app that takes a YouTube link and returns a full optimization
   - With Nano Banana (`gemini-3-pro-image` → `gemini-3.1-flash-image` → `gemini-2.5-flash-image`), the background is AI-generated and the text is set in Heebo or Anton.
   - Without image quota, the **Smart Composer** builds the thumbnails from real video frames and your uploaded face photo or frame.
   - You can regenerate with written feedback.
+- **Grok workflow (default for AI backgrounds).** For each concept, Gemini writes an English Grok Imagine prompt (16:9, photoreal, high contrast, empty headline side, no text). "העתק פרומפט ופתח ב-Grok" copies it and opens grok.com/imagine. The image you upload back (drag & drop or file picker) is cover-cropped to 1280×720 and gets the Hebrew headline and badge overlay. Nano Banana auto-generation is optional (Settings → Advanced, off by default).
 - A pinned comment, a downloadable full report (.md) and a local history.
 
 ## Architecture
@@ -29,6 +30,7 @@ js/ui/
 tests/
   harness.mjs    Node end-to-end run of the core pipeline (key from env only)
   ui_preview.py  Playwright run of the real UI + screenshots
+  grok_preview.py  Playwright test of the Grok upload/overlay/download flow (no API calls)
 ```
 
 ### Security
