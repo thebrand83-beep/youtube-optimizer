@@ -43,8 +43,16 @@ const CID_RE = /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
 $('#toggleKey').onclick = () => { const i = $('#apiKey'); i.type = i.type === 'password' ? 'text' : 'password'; $('#toggleKey').textContent = i.type === 'password' ? 'הצג' : 'הסתר'; };
 $('#testKey').onclick = async () => {
   const st = $('#keyStatus'); st.className = 'status'; st.textContent = 'בודק…';
-  try { await generate({ apiKey: $('#apiKey').value.trim(), model: CONFIG.textModels.fast[0], contents: [{ parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 5 } }); st.className = 'status ok'; st.textContent = '✓ המפתח תקין ומחובר ל-Gemini'; }
-  catch (e) { st.className = 'status err'; st.textContent = e.he || e.message; }
+  const key = $('#apiKey').value.trim();
+  if (!key) { st.className = 'status err'; st.textContent = 'הדבק קודם את המפתח'; return; }
+  try {
+    // Validate the key via the lightweight models list (not affected by model load), then save it.
+    const r = await fetch(`${CONFIG.apiBase}/models?pageSize=1`, { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(20000) });
+    if (r.ok) { store.setKey(key); refreshKeyDot(); st.className = 'status ok'; st.textContent = '✓ המפתח תקין ונשמר'; return; }
+    if (r.status === 400 || r.status === 401) { st.className = 'status err'; st.textContent = 'מפתח ה-API לא תקין. ודא שהעתקת אותו במלואו.'; return; }
+    if (r.status === 403) { st.className = 'status err'; st.textContent = 'למפתח אין הרשאה ל-Gemini API. ודא שהשירות מופעל בפרויקט.'; return; }
+    store.setKey(key); refreshKeyDot(); st.className = 'status ok'; st.textContent = `המפתח נשמר. השרת החזיר ${r.status}, אפשר להתחיל לעבוד.`;
+  } catch (e) { store.setKey(key); refreshKeyDot(); st.className = 'status'; st.textContent = 'לא הצלחתי לבדוק כרגע (בעיית רשת), אבל המפתח נשמר.'; }
 };
 $('#saveSettings').onclick = () => {
   const cid = $('#clientId').value.trim();
