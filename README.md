@@ -49,3 +49,16 @@ tests/
 python3 -m http.server 8765   # open http://localhost:8765
 GEMINI_API_KEY=... node tests/harness.mjs "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
+
+## Publish to YouTube (direct optimization)
+The **פרסום ליוטיוב** tab writes the optimizations straight to the video through the YouTube Data API v3, from the browser:
+- Sign-in uses the Google Identity Services token client with the `youtube.force-ssl` scope. The token is kept in memory only. The OAuth **Client ID** is public and is entered in Settings. See the setup guide: [docs/youtube-setup-he.md](docs/youtube-setup-he.md).
+- Channel ownership is verified first (`channels.list mine` against `videos.list`).
+- Every item can be switched on or off and shows a before/after diff:
+  - title, description with chapters, tags, category and language: `videos.update`, 50 units
+  - thumbnail: `thumbnails.set`, 50 units
+  - Gemini-generated SRT captions in Hebrew/English: `captions.insert`, 400 units each
+  - comment: `commentThreads.insert`, 50 units. The API can't pin comments, so the app links to the comment for a manual pin.
+- The original snippet and thumbnail are backed up to localStorage and can be downloaded as JSON. **שחזר מקור** re-applies them and deletes the captions and comments the app created.
+- Modules: `js/core/youtube-api.js`, `js/core/captions.js`, `js/ui/google-auth.js`, `js/ui/publish.js`.
+- Tests: `tests/publish_mock_test.py` (mocked GIS and API end-to-end) and `tests/captions_test.mjs` (real caption generation using the env key).

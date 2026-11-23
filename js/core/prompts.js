@@ -66,6 +66,7 @@ export const SEO_SCHEMA = obj({
   hashtags: arr(str(), '3-6 hashtags without spaces; the first 3 are the most important'),
   tags: arr(str(), '25-35 tags ordered by importance: exact keywords, variations, long-tail, misspellings, English+local language mix if relevant'),
   pinned_comment: str('An engaging pinned comment that sparks replies'),
+  category_id: str('Best YouTube categoryId as a number string: 27 Education, 26 Howto & Style, 22 People & Blogs, 24 Entertainment, 28 Science & Technology, 19 Travel & Events, 17 Sports, 10 Music, 20 Gaming, 1 Film & Animation, 2 Autos & Vehicles, 15 Pets & Animals, 23 Comedy, 25 News & Politics, 29 Nonprofits & Activism'),
   seo_notes: arr(str(), 'Short notes on keyword strategy'),
 });
 

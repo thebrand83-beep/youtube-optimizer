@@ -157,10 +157,35 @@
       <label class="lbl" for="links">קישורים קבועים לתיאור (שורה לכל קישור)</label>
       <textarea class="textarea" id="links" rows="4" placeholder="🔗 קישורים:&#10;▸ אתר: https://...&#10;▸ אינסטגרם: https://..."></textarea>
     </div>
+    <div class="row">
+      <label class="lbl" for="clientId">Google OAuth Client ID (לפרסום ישיר ליוטיוב)</label>
+      <input class="input" id="clientId" dir="ltr" autocomplete="off" spellcheck="false" placeholder="1234567890-xxxx.apps.googleusercontent.com">
+      <p class="small muted" style="margin-top:6px">מזהה ציבורי (לא סוד) שמאפשר להתחבר לערוץ שלך. <a href="#" id="openHelp">איך יוצרים אותו? מדריך שלב-אחר-שלב</a></p>
+      <p class="status" id="cidStatus"></p>
+    </div>
     <div class="modal-actions"><button class="btn btn-gold" id="saveSettings">שמור</button><button class="btn btn-ghost" data-close>סגור</button><button class="btn btn-ghost" id="clearKey" style="margin-inline-start:auto">מחק מפתח</button></div>
   </div>
 </div>
 
+<div class="overlay" id="ytHelp"><div class="card lux modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <h2 id="helpTitle">חיבור האפליקציה לערוץ היוטיוב</h2>
+  <p class="muted small">הגדרה חד-פעמית, כ-10 דקות, ללא עלות. בסוף תקבל Client ID — מזהה ציבורי שמאפשר לאפליקציה לבקש ממך הרשאה לערוך את הסרטונים בערוץ.</p>
+  <ol class="guide">
+    <li><b>צור פרויקט ב-Google Cloud</b><span>היכנס ל-<a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com</a> עם החשבון של הערוץ ← "New Project" ← שם: <code>YouTube Pro Studio</code> ← Create.</span></li>
+    <li><b>הפעל את YouTube Data API v3</b><span>ב-<a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">API Library</a> חפש "YouTube Data API v3" ← Enable.</span></li>
+    <li><b>הגדר מסך הסכמה (OAuth consent screen)</b><span><a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">Google Auth Platform</a> ← Get started ← שם האפליקציה ואימייל תמיכה ← Audience: <b>External</b> ← סיום. אחר כך בלשונית <b>Audience</b> ← Test users ← Add users ← <code>studioimage1983@gmail.com</code> (או החשבון שמחזיק את הערוץ). השאר במצב <b>Testing</b>.</span></li>
+    <li><b>צור OAuth Client ID</b><span>בלשונית <a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener">Clients</a> ← Create client ← Application type: <b>Web application</b>. תחת <b>Authorized JavaScript origins</b> הוסף:<br><code dir="ltr">https://thebrand83-beep.github.io</code><br><code dir="ltr">http://localhost:8765</code><br>(אין צורך ב-Redirect URIs) ← Create.</span></li>
+    <li><b>הדבק באפליקציה</b><span>העתק את ה-Client ID (מסתיים ב-<code dir="ltr">.apps.googleusercontent.com</code>) ← ⚙️ הגדרות ← "Google OAuth Client ID" ← שמור. בלשונית "פרסום ליוטיוב" לחץ "התחבר עם Google".</span></li>
+  </ol>
+  <div class="guide-notes">
+    <p>⚠️ בהתחברות הראשונה Google תציג "Google hasn't verified this app" — זה תקין לאפליקציה במצב Testing שלך. לחץ <b>Continue</b>.</p>
+    <p>🔒 אין סודות באפליקציה: ה-Client ID ציבורי, וההרשאה נשמרת רק בזיכרון הדפדפן לשעה. אפשר לבטל אותה בכל רגע ב-<a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">הרשאות חשבון Google</a>.</p>
+    <p>💰 YouTube Data API חינמי: 10,000 יחידות ביום. פרסום מלא של סרטון ≈ 1,000 יחידות (כתוביות הן החלק היקר: 400 לשפה).</p>
+    <p>🏷️ העלאת תמונה ממוזערת דורשת ערוץ מאומת בטלפון: <a href="https://www.youtube.com/verify" target="_blank" rel="noopener">youtube.com/verify</a>.</p>
+    <p>🚀 לשימוש אישי מצב Testing מספיק. כשהאפליקציה תהפוך למוצר בתשלום ללקוחות, נצטרך לעבור אימות של Google (Verification) להרשאת youtube.force-ssl.</p>
+  </div>
+  <div class="modal-actions"><a class="btn btn-gold" href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">פתח את Google Cloud</a><button class="btn btn-ghost" data-close>סגור</button></div>
+</div></div>
 <div class="overlay" id="history"><div class="card lux modal"><h2>ניתוחים אחרונים</h2><p class="muted small">נשמרים בדפדפן הזה בלבד.</p><div id="histList"></div><div class="modal-actions"><button class="btn btn-ghost" data-close>סגור</button></div></div></div>
 
 <div class="toast" id="toast"></div>

@@ -6,6 +6,7 @@ import { tagsLength, fitTags, normHashtag } from '../core/seo.js';
 import * as store from './storage.js';
 import { grokPrompt } from '../core/prompts.js';
 import { render, toJpeg, loadImage, ensureFonts } from './composer.js';
+import { initPublish, publishPanel, onPublishTab, resetPublish, refreshPublish } from './publish.js';
 
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -29,12 +30,16 @@ document.addEventListener('click', e => { const b = e.target.closest('.seg butto
 
 /* ---------- settings ---------- */
 function refreshKeyDot() { $('#btnSettings').dataset.ok = store.getKey() ? '1' : '0'; }
-function openSettings() {
+function openSettings(focus) {
   const s = store.getSettings();
-  $('#apiKey').value = store.getKey(); setSeg('quality', s.quality); setSeg('aiImages', s.aiImages); $('#links').value = s.links || '';
-  $('#keyStatus').textContent = ''; $('#settings').classList.add('open');
+  $('#apiKey').value = store.getKey(); setSeg('quality', s.quality); setSeg('aiImages', s.aiImages); $('#links').value = s.links || ''; $('#clientId').value = s.clientId || '';
+  $('#keyStatus').textContent = ''; $('#cidStatus').textContent = ''; $('#settings').classList.add('open');
+  if (focus === 'clientId') setTimeout(() => { $('#clientId').scrollIntoView({ block: 'center' }); $('#clientId').focus(); }, 50);
 }
-$('#btnSettings').onclick = openSettings; $('#errSettings').onclick = openSettings;
+function openHelp() { $('#ytHelp').classList.add('open'); }
+$('#btnSettings').onclick = () => openSettings(); $('#errSettings').onclick = () => openSettings();
+$('#openHelp').onclick = e => { e.preventDefault(); openHelp(); };
+const CID_RE = /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
 $('#toggleKey').onclick = () => { const i = $('#apiKey'); i.type = i.type === 'password' ? 'text' : 'password'; $('#toggleKey').textContent = i.type === 'password' ? 'הצג' : 'הסתר'; };
 $('#testKey').onclick = async () => {
   const st = $('#keyStatus'); st.className = 'status'; st.textContent = 'בודק…';
@@ -42,7 +47,10 @@ $('#testKey').onclick = async () => {
   catch (e) { st.className = 'status err'; st.textContent = e.he || e.message; }
 };
 $('#saveSettings').onclick = () => {
-  store.setKey($('#apiKey').value); store.setSettings({ quality: segVal('quality'), aiImages: segVal('aiImages'), links: $('#links').value });
+  const cid = $('#clientId').value.trim();
+  if (cid && !CID_RE.test(cid)) { $('#cidStatus').className = 'status err'; $('#cidStatus').textContent = 'זה לא נראה כמו Client ID — הוא אמור להסתיים ב-.apps.googleusercontent.com'; return; }
+  store.setKey($('#apiKey').value); store.setSettings({ quality: segVal('quality'), aiImages: segVal('aiImages'), links: $('#links').value, clientId: cid });
+  if ($('[data-p="pub"]')) refreshPublish();
   if (segVal('aiImages') === 'auto') { S.aiBlocked = false; sessionStorage.removeItem('ytps.aiBlocked'); }
   refreshKeyDot(); $('#settings').classList.remove('open'); toast('ההגדרות נשמרו');
 };
@@ -90,7 +98,7 @@ async function run() {
     language: segVal('language'), detail: segVal('detail'), description: $('#desc').value.trim(), audience: $('#audience').value.trim(), timezone: $('#tz').value.trim(),
     links: settings.links ? settings.links.split('\n').map(s => s.trim()).filter(Boolean) : null,
   };
-  S.quality = settings.quality; S.thumbs = []; S.concepts = []; S.thumbsPending = false; S.thumbErr = null; S.selectedTitle = 0;
+  resetPublish(); S.quality = settings.quality; S.thumbs = []; S.concepts = []; S.thumbsPending = false; S.thumbErr = null; S.selectedTitle = 0;
   $('#go').disabled = true; showOnly('#progressSec');
   $('#progressSec').scrollIntoView({ behavior: 'smooth', block: 'center' });
   let ti = 0; $('#tip').textContent = TIPS[0]; clearInterval(tipTimer); tipTimer = setInterval(() => { $('#tip').textContent = TIPS[++ti % TIPS.length]; }, 6000);
@@ -181,6 +189,7 @@ function saveHistory() {
   store.addHistory({ id: S.vid || S.meta?.title, vid: S.vid, ts: Date.now(), meta: S.meta, brief: S.brief, analysis: S.analysis, seo: S.seo, concepts: S.concepts, models: S.models });
 }
 async function restore(x) {
+  resetPublish();
   Object.assign(S, { vid: x.vid, meta: x.meta, brief: x.brief, analysis: x.analysis, seo: x.seo, concepts: x.concepts || [], models: x.models, thumbs: [], selectedTitle: 0, thumbsPending: false, thumbErr: null });
   if (S.vid) preloadFrames(S.vid);
   await buildThumbs({ apiKey: store.getKey(), skipAI: true });
@@ -281,6 +290,7 @@ function updateThumbsPanel() {
   panel.innerHTML = thumbsPanel();
   const n = $('[data-t="th"] .n'); if (n) n.textContent = S.thumbsPending ? '…' : S.thumbs.length;
   wireThumbs();
+  if ($('.tab.on')?.dataset.t === 'pub') refreshPublish();
 }
 
 function renderResults() {
@@ -305,6 +315,7 @@ function renderResults() {
     <button class="tab" data-t="tg">תגיות <span class="n">${s.tags.length}</span></button>
     <button class="tab" data-t="th">תמונות ממוזערות <span class="n">${S.thumbsPending ? '…' : S.thumbs.length}</span></button>
     <button class="tab" data-t="re">דוח אופטימיזציה</button>
+    <button class="tab tab-pub" data-t="pub">${ic('upload')}פרסום ליוטיוב</button>
   </nav>
 
   <section class="panel on" data-p="ov">
@@ -363,7 +374,8 @@ ${thumbsPanel()}
     </div>
     <div class="footer-actions"><button class="btn btn-gold" id="dlReport">${ic('dl')}הורד דוח מלא</button><button class="btn btn-ghost" data-copy="all">${ic('copy')}העתק הכל</button></div>
     <p class="small muted" style="text-align:center;margin-top:14px">נותח על ידי ${esc(S.models?.analysis || '')} · SEO: ${esc(S.models?.seo || '')}</p>
-  </section>`;
+  </section>
+  <section class="panel" data-p="pub"></section>`;
   showOnly('#results');
   requestAnimationFrame(() => setTimeout(() => {
     $$('.ring-arc').forEach(c => c.style.strokeDashoffset = c.dataset.off);
@@ -433,7 +445,7 @@ function renderTags() {
 }
 
 function wireResults() {
-  $('#tabs').onclick = e => { const b = e.target.closest('.tab'); if (!b) return; $$('.tab').forEach(x => x.classList.toggle('on', x === b)); $$('.panel').forEach(p => p.classList.toggle('on', p.dataset.p === b.dataset.t)); if (b.dataset.t === 'th') S.thumbs.forEach((_, i) => redraw(i)); if (b.dataset.t === 'ti') setTimeout(() => $$('.title-card .bar i').forEach(x => x.style.width = x.dataset.w + '%'), 50); };
+  $('#tabs').onclick = e => { const b = e.target.closest('.tab'); if (!b) return; $$('.tab').forEach(x => x.classList.toggle('on', x === b)); $$('.panel').forEach(p => p.classList.toggle('on', p.dataset.p === b.dataset.t)); if (b.dataset.t === 'th') S.thumbs.forEach((_, i) => redraw(i)); if (b.dataset.t === 'pub') onPublishTab(); if (b.dataset.t === 'ti') setTimeout(() => $$('.title-card .bar i').forEach(x => x.style.width = x.dataset.w + '%'), 50); };
   updateDesc(); renderTags();
   $('#descText').oninput = updateDesc;
   $('#tagBox').onclick = e => { const b = e.target.closest('[data-rm]'); if (b) { S.seo.tags.splice(+b.dataset.rm, 1); renderTags(); } };
@@ -483,6 +495,7 @@ async function regenerate() {
   } catch (e) { toast(e.he || e.message, true); btn.disabled = false; btn.innerHTML = `${ic('refresh')}צור קונספטים חדשים`; }
 }
 
+async function thumbJpeg(i) { const c = document.createElement('canvas'); drawThumb(i, c); return toJpeg(c, CONFIG.limits.thumbBytesMax); }
 async function downloadThumb(i) {
   const c = document.createElement('canvas'); drawThumb(i, c);
   const blob = await toJpeg(c, CONFIG.limits.thumbBytesMax);
@@ -520,5 +533,6 @@ function downloadReport() {
 
 /* ---------- init ---------- */
 $('#url').addEventListener('focus', () => document.body.classList.remove('compact'));
+initPublish({ S, esc, ic, toast, secH, drawThumb, thumbJpeg, openSettings, openHelp, getDesc: () => $('#descText')?.value || S.seo.descriptionText });
 refreshKeyDot();
 const qp = new URLSearchParams(location.search).get('v'); if (qp) $('#url').value = qp;
