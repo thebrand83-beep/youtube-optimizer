@@ -1,6 +1,6 @@
 """Mocked end-to-end test of the 'Publish to YouTube' flow (GIS + YouTube Data API + Gemini captions are stubbed).
 Run: python3 -m http.server 8765 &  then  python3 tests/publish_mock_test.py [restore.json]"""
-import json, re, sys, asyncio, copy
+import json, re, sys, os, asyncio, copy
 from playwright.async_api import async_playwright
 OUT = '/workspace/youtube-optimizer-preview'
 VID = '1KItA0PzRUw'
@@ -72,7 +72,7 @@ async def setup(b, state, fail=None, client_id=True, w=1440):
     await page.route('**/accounts.google.com/gsi/client', lambda r: r.fulfill(status=200, body='', headers={'content-type': 'text/javascript'}))
     await page.route('**/www.googleapis.com/**', make_api(state, fail))
     await page.route('**/generativelanguage.googleapis.com/**', gemini)
-    await page.goto('http://localhost:8765/')
+    await page.goto(os.environ.get('BASE', 'http://localhost:8765/'))
     s = {'quality': 'balanced', 'aiImages': 'off', 'links': ''}
     if client_id: s['clientId'] = '1234567890-mocktest.apps.googleusercontent.com'
     await page.evaluate("([h,s])=>{localStorage.clear();localStorage.setItem('ytps.geminiKey','mock');localStorage.setItem('ytps.history',h);localStorage.setItem('ytps.settings',s)}", [json.dumps(hist, ensure_ascii=False), json.dumps(s)])
