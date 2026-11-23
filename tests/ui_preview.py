@@ -35,8 +35,13 @@ async def main():
             await page.fill('#url', URL)
             await page.fill('#desc', os.environ.get('BRIEF', ''))
             await page.click('#go')
-            await page.wait_for_timeout(6000)
+            await page.wait_for_timeout(9000)
             await page.screenshot(path=f'{OUT}/03-progress.png')
+            await page.wait_for_function("document.querySelector('#pStage').textContent.includes('כותרות') || !document.querySelector('#results').classList.contains('hidden')", timeout=400000)
+            await page.wait_for_timeout(6000)
+            if await page.is_visible('#progressSec'):
+                await page.screenshot(path=f'{OUT}/03b-progress-stage2.png')
+            print('progress:', await page.inner_text('#pPct'), await page.inner_text('#pStage'), await page.inner_text('#pElapsed'))
         await page.wait_for_selector('#results:not(.hidden), #errorSec:not(.hidden)', timeout=400000)
         if await page.is_visible('#errorSec'):
             await page.screenshot(path=f'{OUT}/99-error.png'); print('ERROR:', await page.inner_text('#errMsg')); return

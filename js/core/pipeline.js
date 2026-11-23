@@ -6,11 +6,11 @@ import { normalizeChapters, fitTags, assembleDescription, defaultLinks } from '.
 
 const jsonCfg = (schema, extra = {}) => ({ responseMimeType: 'application/json', responseSchema: schema, temperature: 0.7, ...extra });
 
-export async function analyzeVideo({ apiKey, video, meta, brief, quality = 'balanced', onStatus, signal }) {
+export async function analyzeVideo({ apiKey, video, meta, brief, quality = 'balanced', onStatus, onText, signal }) {
   // video: { youtubeUrl } or { fileUri, mimeType }
   const part = video.youtubeUrl ? { file_data: { file_uri: video.youtubeUrl } } : { file_data: { file_uri: video.fileUri, mime_type: video.mimeType } };
   const res = await generateWithFallback({
-    apiKey, signal, onStatus, models: CONFIG.textModels[quality],
+    apiKey, signal, onStatus, onText, stream: true, ...CONFIG.timing.analysis, models: CONFIG.textModels[quality],
     systemInstruction: { parts: [{ text: P.SYSTEM }] },
     contents: [{ role: 'user', parts: [part, { text: P.analysisPrompt({ meta, brief }) }] }],
     generationConfig: jsonCfg(P.ANALYSIS_SCHEMA, { mediaResolution: brief.detail === 'high' ? 'MEDIA_RESOLUTION_MEDIUM' : 'MEDIA_RESOLUTION_LOW', temperature: 0.4 }),
@@ -19,9 +19,9 @@ export async function analyzeVideo({ apiKey, video, meta, brief, quality = 'bala
   return { analysis, model: res.model, usage: res.usage };
 }
 
-export async function buildSeo({ apiKey, analysis, meta, brief, quality = 'balanced', onStatus, signal }) {
+export async function buildSeo({ apiKey, analysis, meta, brief, quality = 'balanced', onStatus, onText, signal }) {
   const res = await generateWithFallback({
-    apiKey, signal, onStatus, models: CONFIG.textModels[quality],
+    apiKey, signal, onStatus, onText, stream: true, ...CONFIG.timing.text, models: CONFIG.textModels[quality],
     systemInstruction: { parts: [{ text: P.SYSTEM }] },
     contents: [{ role: 'user', parts: [{ text: P.seoPrompt({ analysis, meta, brief }) }] }],
     generationConfig: jsonCfg(P.SEO_SCHEMA, { temperature: 0.8 }),
@@ -42,9 +42,9 @@ export function finalizeSeo(seo, analysis, brief) {
   return { ...seo, lang, chapters, chaptersValid: ch.valid, tags: fitTags(seo.tags || []), descriptionText };
 }
 
-export async function designThumbnails({ apiKey, analysis, seo, brief, feedback, previous, hasFace, quality = 'balanced', onStatus, signal }) {
+export async function designThumbnails({ apiKey, analysis, seo, brief, feedback, previous, hasFace, quality = 'balanced', onStatus, onText, signal }) {
   const res = await generateWithFallback({
-    apiKey, signal, onStatus, models: CONFIG.textModels[quality],
+    apiKey, signal, onStatus, onText, stream: true, ...CONFIG.timing.text, models: CONFIG.textModels[quality],
     systemInstruction: { parts: [{ text: P.SYSTEM }] },
     contents: [{ role: 'user', parts: [{ text: P.thumbPrompt({ analysis, seo, brief, feedback, previous, hasFace }) }] }],
     generationConfig: jsonCfg(P.THUMB_SCHEMA, { temperature: 1 }),

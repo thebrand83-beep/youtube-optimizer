@@ -105,6 +105,12 @@
   <section class="wrap hidden" id="progressSec">
     <div class="card lux progress">
       <div class="prog-head"><div class="orb"><i></i></div><div><h3 id="progTitle">מנתח את הסרטון…</h3><p id="progMsg">צופה בסרטון, מקשיב לדיבור וקורא טקסטים על המסך</p></div></div>
+      <div class="pbar-wrap">
+        <div class="pbar-top"><span class="pstage"><i class="pulse-dot"></i><span id="pStage">מתחיל…</span></span><span class="pct"><b id="pPct">0</b><small>%</small></span></div>
+        <div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="התקדמות"><i id="pFill"></i></div>
+        <div class="pbar-meta"><span>זמן שעבר <b id="pElapsed" dir="ltr">00:00</b></span><span id="pNote" class="pnote"></span></div>
+        <div class="plive" id="pLive"></div>
+      </div>
       <div class="steps">
         <div class="step" data-s="1"><b>שלב 1</b>צפייה וניתוח עומק</div>
         <div class="step" data-s="2"><b>שלב 2</b>כותרות, תיאור ותגיות</div>

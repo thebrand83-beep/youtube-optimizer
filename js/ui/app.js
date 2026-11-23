@@ -95,11 +95,14 @@ async function run() {
   $('#progressSec').scrollIntoView({ behavior: 'smooth', block: 'center' });
   let ti = 0; $('#tip').textContent = TIPS[0]; clearInterval(tipTimer); tipTimer = setInterval(() => { $('#tip').textContent = TIPS[++ti % TIPS.length]; }, 6000);
   const onStatus = m => $('#progMsg').textContent = m;
+  P.start();
   try {
     progress(1, 'צופה בסרטון, מקשיב לדיבור וקורא טקסטים על המסך…', 'מנתח את הסרטון');
+    P.stage('קריאת פרטי הסרטון', 0, 4, { tau: 3 });
     let video;
     if (file) {
       const { uploadFile } = await import('../core/gemini.js');
+      P.stage('מעלה את קובץ הווידאו', 0, 15, { tau: 40 });
       const up = await uploadFile({ apiKey, file, mimeType: file.type || 'video/mp4', displayName: file.name, onStatus });
       video = { fileUri: up.uri, mimeType: up.mimeType }; S.meta = { title: file.name.replace(/\.\w+$/, '') };
     } else {
@@ -108,26 +111,69 @@ async function run() {
       video = { youtubeUrl: watchUrl(vid) };
       preloadFrames(vid);
     }
-    const A = await analyzeVideo({ apiKey, video, meta: S.meta, brief: S.brief, quality: S.quality, onStatus });
+    P.stage('צפייה וניתוח עומק של הסרטון', P.pct, 58, { tau: 45, expChars: 7500 });
+    const A = await analyzeVideo({ apiKey, video, meta: S.meta, brief: S.brief, quality: S.quality, onStatus, onText: t => P.chars(t.length) });
     S.analysis = A.analysis; S.models = { analysis: A.model };
-    progress(2, 'כותב כותרות, תיאור SEO מלא ותגיות…', 'בונה חבילת SEO');
-    const B = await buildSeo({ apiKey, analysis: S.analysis, meta: S.meta, brief: S.brief, quality: S.quality, onStatus });
-    S.seo = B.seo; S.models.seo = B.model;
-    progress(3, 'מתכנן 3 קונספטים לתמונה ממוזערת…', 'ארט דיירקשן');
-    const C = await designThumbnails({ apiKey, analysis: S.analysis, seo: S.seo, brief: S.brief, hasFace: !!S.face, quality: S.quality, onStatus });
-    S.concepts = C.concepts;
+    // SEO package and thumbnail concepts only need the analysis JSON (never the video again) → run in parallel.
+    progress(2, 'כותב כותרות, תיאור SEO מלא ותגיות — ובמקביל מתכנן תמונות ממוזערות…', 'בונה חבילת SEO');
+    $$('.step[data-s="3"]').forEach(x => x.classList.add('active'));
+    P.stage('כותרות, תיאור, תגיות וקונספטים לתמונות', 58, 93, { tau: 30, expChars: 9000 });
+    let seoChars = 0, thChars = 0;
+    const seoP = buildSeo({ apiKey, analysis: S.analysis, meta: S.meta, brief: S.brief, quality: S.quality, onStatus,
+      onText: t => { seoChars = t.length; P.chars(seoChars + thChars); const m = /"title"\s*:\s*"([^"]{8,})"/.exec(t); if (m) P.live(`כותרת ראשונה: "${m[1]}"`); } });
+    const thP = designThumbnails({ apiKey, analysis: S.analysis, brief: S.brief, hasFace: !!S.face, quality: S.quality, onStatus,
+      onText: t => { thChars = t.length; P.chars(seoChars + thChars); } });
+    const [B, C] = await Promise.allSettled([seoP, thP]);
+    if (B.status === 'rejected') throw B.reason;
+    S.seo = B.value.seo; S.models.seo = B.value.model;
+    S.concepts = C.status === 'fulfilled' ? C.value.concepts : [];
+    S.thumbErr = C.status === 'rejected' ? (C.reason?.he || C.reason?.message) : null;
     progress(4, 'מעצב תמונות ממוזערות…', 'עיצוב התמונות');
+    P.stage('עיצוב התמונות הממוזערות', 93, 100, { tau: 3 });
     await buildThumbs({ apiKey, onStatus });
+    P.done();
     progress(5);
     saveHistory();
     renderResults();
   } catch (e) {
     console.error(e);
+    P.stop();
     $('#errTitle').textContent = 'לא הצלחנו להשלים את הניתוח';
     $('#errMsg').textContent = e.he || e.message || String(e);
     showOnly('#errorSec');
-  } finally { $('#go').disabled = false; clearInterval(tipTimer); }
+  } finally { $('#go').disabled = false; clearInterval(tipTimer); P.stop(); }
 }
+
+/* ---------- honest progress bar ----------
+   Each stage jumps to its real checkpoint when it completes. While a stage runs, the bar creeps
+   asymptotically toward (never reaching) the next checkpoint, and streamed output pushes it further. */
+const P = {
+  pct: 0, t0: 0, timer: null, st: null,
+  start() { this.pct = 0; this.t0 = Date.now(); this.st = null; $('#pNote').textContent = ''; $('#pLive').textContent = ''; this.paint(); clearInterval(this.timer); this.timer = setInterval(() => this.tick(), 200); $('#progressSec').classList.add('running'); },
+  stage(name, from, to, { tau = 20, expChars = 0 } = {}) { this.pct = Math.max(this.pct, from); this.st = { name, from: this.pct, to, tau, expChars, chars: 0, t: Date.now() }; $('#pStage').textContent = name; $('#pNote').textContent = ''; this.tick(); },
+  chars(n) { if (this.st) this.st.chars = n; },
+  live(txt) { $('#pLive').textContent = txt; },
+  tick() {
+    const st = this.st;
+    if (st) {
+      const t = (Date.now() - st.t) / 1000, span = st.to - st.from;
+      const creep = st.from + span * 0.9 * (1 - Math.exp(-t / st.tau));
+      const tok = st.expChars && st.chars ? st.from + span * 0.97 * Math.min(1, st.chars / st.expChars) : 0;
+      this.pct = Math.min(st.to - 0.3, Math.max(this.pct, creep, tok));
+      if (t > 150) $('#pNote').textContent = 'השרת עמוס, ממשיך לעבוד…';
+    }
+    this.paint();
+  },
+  paint() {
+    $('#pPct').textContent = Math.floor(this.pct);
+    $('#pFill').style.width = this.pct + '%';
+    $('#progressSec .pbar').setAttribute('aria-valuenow', Math.floor(this.pct));
+    const s = Math.floor((Date.now() - this.t0) / 1000);
+    $('#pElapsed').textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  },
+  done() { this.pct = 100; this.st = null; $('#pStage').textContent = 'הושלם'; this.paint(); },
+  stop() { clearInterval(this.timer); $('#progressSec').classList.remove('running'); },
+};
 
 function saveHistory() {
   store.addHistory({ id: S.vid || S.meta?.title, vid: S.vid, ts: Date.now(), meta: S.meta, brief: S.brief, analysis: S.analysis, seo: S.seo, concepts: S.concepts, models: S.models });
@@ -285,6 +331,7 @@ function renderResults() {
       </div>
       <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-gold" id="regen">${ic('refresh')}צור קונספטים חדשים</button><span class="small muted" style="align-self:center">התמונות שתעלה נשארות בדפדפן בלבד.</span></div>
     </div>
+    ${!S.thumbs.length ? `<div class="notice">${ic('warn')}<div><b>הקונספטים לתמונות לא נוצרו הפעם.</b><br><span class="muted">${esc(S.thumbErr || '')} לחץ "צור קונספטים חדשים" כדי לנסות שוב — שאר התוצאות מוכנות.</span></div></div>` : ''}
     <div class="grid3" id="thumbGrid">${S.thumbs.map((t, i) => thumbCard(t, i)).join('')}</div>
     <div class="card sec" style="margin-top:18px">${secH('img', 'כך זה ייראה בפיד של יוטיוב')}<div class="feed">${S.thumbs.map((t, i) => `<div class="feed-item"><div class="ph"><canvas data-thumb="${i}"></canvas></div><div class="fl"><div class="av"></div><div><div class="ft">${esc(s.titles?.[S.selectedTitle]?.title)}</div><div class="fc">${esc(m.author_name || 'הערוץ שלך')} · לפני שעה</div></div></div></div>`).join('')}</div></div>
   </section>

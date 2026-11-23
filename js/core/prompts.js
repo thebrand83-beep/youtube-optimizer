@@ -106,7 +106,7 @@ export function thumbPrompt({ analysis, seo, brief, feedback, previous, hasFace 
   return `You are a top YouTube thumbnail art director. Design 3 distinct, high-CTR thumbnail concepts for this video.
 
 Video analysis: ${JSON.stringify({ summary: analysis.summary, main_topic: analysis.main_topic, audience: analysis.target_audience, best_frames: analysis.best_thumbnail_frames, visual_style: analysis.visual_style, keywords: analysis.keywords?.primary })}
-Chosen title options: ${JSON.stringify((seo?.titles || []).slice(0, 3).map(t => t.title))}
+${seo?.titles?.length ? `Chosen title options: ${JSON.stringify(seo.titles.slice(0, 3).map(t => t.title))}` : 'The video titles are being written in parallel around the primary keywords above — so the thumbnail text must NOT repeat the main keyword; it should add emotion, curiosity or the result.'}
 ${hasFace ? 'The creator uploaded a reference photo of his face — concepts should feature him with a strong, readable expression.' : ''}
 ${previous ? `Previous concepts: ${JSON.stringify(previous.map(c => ({ headline: c.headline, layout: c.layout })))}` : ''}
 ${feedback ? `CREATOR FEEDBACK — follow it strictly: "${feedback}"` : ''}

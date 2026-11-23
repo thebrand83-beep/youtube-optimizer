@@ -13,16 +13,20 @@ const out = process.argv[3] || '/workspace/youtube-optimizer-preview/harness';
 fs.mkdirSync(out, { recursive: true });
 const id = parseVideoId(url);
 const brief = { language: 'he', description: process.env.BRIEF || '', audience: process.env.AUDIENCE || '', timezone: 'Israel (Asia/Jerusalem)' };
-const log = m => console.log(new Date().toISOString().slice(11, 19), m);
+const T0 = Date.now(); const log = m => console.log(`[${((Date.now() - T0) / 1000).toFixed(1)}s]`, m);
 const t0 = Date.now();
 const meta = await fetchOEmbed(id); log(`oEmbed: ${meta?.title}`);
 const A = await analyzeVideo({ apiKey, video: { youtubeUrl: watchUrl(id) }, meta, brief, onStatus: log }); log(`analysis by ${A.model} tokens=${A.usage?.totalTokenCount}`);
 fs.writeFileSync(`${out}/analysis.json`, JSON.stringify(A.analysis, null, 2));
-const B = await buildSeo({ apiKey, analysis: A.analysis, meta, brief, onStatus: log }); log(`seo by ${B.model}`);
+// SEO + thumbnail concepts run in parallel from the analysis JSON (same as the app)
+const t1 = Date.now(); let firstSeoChunk = 0;
+const [B, C] = await Promise.all([
+  buildSeo({ apiKey, analysis: A.analysis, meta, brief, onStatus: log, onText: () => { firstSeoChunk ||= Date.now(); } }).then(r => { log(`seo by ${r.model} in ${((Date.now() - t1) / 1000).toFixed(1)}s (first text after ${((firstSeoChunk - t1) / 1000).toFixed(1)}s)`); return r; }),
+  designThumbnails({ apiKey, analysis: A.analysis, brief, onStatus: log }).then(r => { log(`concepts by ${r.model} in ${((Date.now() - t1) / 1000).toFixed(1)}s`); return r; }),
+]);
 fs.writeFileSync(`${out}/seo.json`, JSON.stringify(B.seo, null, 2));
 fs.writeFileSync(`${out}/description.txt`, B.seo.descriptionText);
 fs.writeFileSync(`${out}/tags.txt`, B.seo.tags.join(', ') + `\n\n(${tagsLength(B.seo.tags)}/500 chars)`);
-const C = await designThumbnails({ apiKey, analysis: A.analysis, seo: B.seo, brief, onStatus: log }); log(`concepts by ${C.model}`);
 fs.writeFileSync(`${out}/thumb-concepts.json`, JSON.stringify(C.concepts, null, 2));
 fs.writeFileSync(`${out}/grok-prompts.txt`, C.concepts.map((c, i) => `=== Concept ${i + 1}: ${c.name} — "${c.headline}" (${c.layout}) ===\n${grokPrompt(c, {})}`).join('\n\n'));
 if (process.env.SKIP_AI_IMAGE) { log('done (skipped AI image)'); process.exit(0); }

@@ -269,3 +269,23 @@ main{min-height:calc(100vh - 150px)}
 .prompt-box pre{margin:8px 0;white-space:pre-wrap;font:12px/1.55 ui-monospace,Menlo,monospace;color:#d9d3c7;background:rgba(0,0,0,.45);border:1px solid var(--line);border-radius:10px;padding:12px;max-height:240px;overflow:auto;text-align:left}
 @media (max-width:900px){.steps3{grid-template-columns:1fr}}
 .grok-steps,.thumb-card,#thumbGrid{scroll-margin-top:150px}
+/* percentage progress bar */
+.pbar-wrap{margin-top:24px}
+.pbar-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:12px}
+.pstage{display:inline-flex;align-items:center;gap:10px;font-weight:600;font-size:.98rem}
+.pulse-dot{width:9px;height:9px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 0 rgba(212,175,106,.6)}
+.running .pulse-dot{animation:ping 1.6s ease-out infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(212,175,106,.55)}100%{box-shadow:0 0 0 12px rgba(212,175,106,0)}}
+.pct{font-variant-numeric:tabular-nums;line-height:1;direction:ltr}
+.pct b{font-size:2.6rem;font-weight:800;background:var(--grad-gold);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-1px}
+.pct small{font-size:1.1rem;color:var(--gold);margin-left:2px;font-weight:600}
+.pbar{position:relative;height:12px;border-radius:99px;background:rgba(255,255,255,.06);box-shadow:inset 0 1px 2px rgba(0,0,0,.5);overflow:hidden}
+.pbar i{position:absolute;inset:0 0 0 auto;width:0;border-radius:inherit;background:var(--grad-gold);box-shadow:0 0 18px rgba(212,175,106,.55);transition:width .35s linear;overflow:hidden}
+.pbar i::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.55) 50%,transparent 80%);transform:translateX(100%);animation:sweep 1.8s ease-in-out infinite}
+.running .pbar i{animation:breathe 2.4s ease-in-out infinite}
+@keyframes sweep{to{transform:translateX(-100%)}}
+@keyframes breathe{50%{filter:brightness(1.18)}}
+.pbar-meta{display:flex;justify-content:space-between;gap:12px;margin-top:10px;font-size:.84rem;color:var(--muted)}
+.pbar-meta b{color:var(--text);font-variant-numeric:tabular-nums;font-weight:600}
+.pnote{color:var(--amber)}
+.plive{margin-top:8px;font-size:.86rem;color:var(--gold2);min-height:1.3em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.9}
